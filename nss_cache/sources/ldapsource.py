@@ -757,14 +757,14 @@ class PasswdUpdateGetter(UpdateGetter):
             self.essential_fields = ['sAMAccountName', 'objectSid']
         else:
             self.attrs = [
-                'uid', 'uidNumber', 'gidNumber', 'gecos', 'cn', 'homeDirectory',
+                'sAMAccountName', 'uidNumber', 'gidNumber', 'gecos', 'cn', 'homeDirectory',
                 'loginShell', 'fullName'
             ]
             if 'uidattr' in self.conf:
                 self.attrs.append(self.conf['uidattr'])
             if 'uidregex' in self.conf:
                 self.uidregex = re.compile(self.conf['uidregex'])
-            self.essential_fields = ['uid', 'uidNumber', 'gidNumber']
+            self.essential_fields = ['sAMAccountName', 'uidNumber', 'gidNumber']
             if self.conf.get('use_rid'):
                 self.attrs.append('sambaSID')
                 self.essential_fields.append('sambaSID')
@@ -800,7 +800,7 @@ class PasswdUpdateGetter(UpdateGetter):
         elif 'uidattr' in self.conf:
             pw.name = obj[self.conf['uidattr']][0]
         else:
-            pw.name = obj['uid'][0]
+            pw.name = obj['sAMAccountName'][0]
 
         if hasattr(self, 'uidregex'):
             pw.name = ''.join([x for x in self.uidregex.findall(pw.name)])
