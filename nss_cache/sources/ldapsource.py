@@ -764,7 +764,8 @@ class PasswdUpdateGetter(UpdateGetter):
                 self.attrs.append(self.conf['uidattr'])
             if 'uidregex' in self.conf:
                 self.uidregex = re.compile(self.conf['uidregex'])
-            self.essential_fields = ['sAMAccountName', 'uidNumber', 'gidNumber']
+            # self.essential_fields = ['uid', 'uidNumber', 'gidNumber']
+            self.essential_fields = ['uidNumber', 'gidNumber']
             if self.conf.get('use_rid'):
                 self.attrs.append('sambaSID')
                 self.essential_fields.append('sambaSID')
@@ -800,7 +801,8 @@ class PasswdUpdateGetter(UpdateGetter):
         elif 'uidattr' in self.conf:
             pw.name = obj[self.conf['uidattr']][0]
         else:
-            pw.name = obj['sAMAccountName'][0]
+            # pw.name = obj['uid'][0]
+            pw.name = obj['sAMAccountName'][0].lower()
 
         if hasattr(self, 'uidregex'):
             pw.name = ''.join([x for x in self.uidregex.findall(pw.name)])
@@ -863,10 +865,12 @@ class GroupUpdateGetter(UpdateGetter):
             elif conf.get('rfc2307bis_alt'):
                 self.attrs = ['cn', 'gidNumber', 'uniqueMember', 'uid']
             else:
-                self.attrs = ['cn', 'gidNumber', 'memberUid', 'uid']
+                #ZR# self.attrs = ['cn', 'gidNumber', 'memberUid', 'uid']
+                self.attrs = ['cn','sAMAccountName', 'member', 'objectSid']
             if 'groupregex' in conf:
                 self.groupregex = re.compile(self.conf['groupregex'])
-            self.essential_fields = ['cn']
+            #ZR# self.essential_fields = ['cn']
+            self.essential_fields = ['cn', 'sAMAccountName', 'objectSid']
             if conf.get('use_rid'):
                 self.attrs.append('sambaSID')
                 self.essential_fields.append('sambaSID')
@@ -885,12 +889,11 @@ class GroupUpdateGetter(UpdateGetter):
         if self.conf.get('ad'):
             gr.name = obj['sAMAccountName'][0]
         # hack to map the users as the corresponding group with the same name
-        elif 'uidattr' in self.conf and self.conf['uidattr'] in obj:
-            gr.name = obj[self.conf['uidattr']][0]
         elif 'uid' in obj:
             gr.name = obj['uid'][0]
         else:
-            gr.name = obj['cn'][0]
+            #ZR# gr.name = obj['sAMAccountName'][0].lower()
+            gr.name = obj['cn'][0].lower()
         # group passwords are deferred to gshadow
         gr.passwd = '*'
         base = self.conf.get("base")
@@ -905,6 +908,9 @@ class GroupUpdateGetter(UpdateGetter):
         elif 'member' in obj:
             for member_dn in obj['member']:
                 member_uid = member_dn.split(',')[0].split('=')[1]
+                member_uid_fixed_array = member_dn.replace(" ","").replace("\\","").lower().split('=')[1].split(',')
+                member_uid = member_uid_fixed_array[1] + "." + member_uid_fixed_array[0]
+                self.log.debug('member_uid: %s', member_uid)
                 # Note that there is not currently a way to consistently distinguish
                 # a group from a person
                 group_members.append(member_uid)
@@ -924,7 +930,8 @@ class GroupUpdateGetter(UpdateGetter):
         elif self.conf.get('use_rid'):
             gr.gid = int(sidToStr(obj['sambaSID'][0]).split('-')[-1])
         else:
-            gr.gid = int(obj['gidNumber'][0])
+            #ZR# gr.gid = int(obj['gidNumber'][0])
+            gr.gid = int(sidToStr(obj['objectSid'][0]).split('-')[-1])
 
         if 'offset' in self.conf:
             gr.gid = int(gr.gid + self.conf['offset'])
