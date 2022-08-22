@@ -756,6 +756,7 @@ class PasswdUpdateGetter(UpdateGetter):
             ]
             self.essential_fields = ['sAMAccountName', 'objectSid']
         else:
+            #We add sAMAccountName for VAI-specific ldap (which is actually mangled AD)
             self.attrs = [
                 'sAMAccountName', 'uidNumber', 'gidNumber', 'gecos', 'cn', 'homeDirectory',
                 'loginShell', 'fullName'
@@ -765,7 +766,8 @@ class PasswdUpdateGetter(UpdateGetter):
             if 'uidregex' in self.conf:
                 self.uidregex = re.compile(self.conf['uidregex'])
             # self.essential_fields = ['uid', 'uidNumber', 'gidNumber']
-            self.essential_fields = ['uidNumber', 'gidNumber']
+            # VAI-Specific
+            self.essential_fields = ['sAMAccountName', 'uidNumber', 'gidNumber']
             if self.conf.get('use_rid'):
                 self.attrs.append('sambaSID')
                 self.essential_fields.append('sambaSID')
@@ -802,6 +804,7 @@ class PasswdUpdateGetter(UpdateGetter):
             pw.name = obj[self.conf['uidattr']][0]
         else:
             # pw.name = obj['uid'][0]
+            # VAI-SPECIFIC, we also make sure its lowercase
             pw.name = obj['sAMAccountName'][0].lower()
 
         if hasattr(self, 'uidregex'):
@@ -865,11 +868,13 @@ class GroupUpdateGetter(UpdateGetter):
             elif conf.get('rfc2307bis_alt'):
                 self.attrs = ['cn', 'gidNumber', 'uniqueMember', 'uid']
             else:
-                #ZR# self.attrs = ['cn', 'gidNumber', 'memberUid', 'uid']
-                self.attrs = ['cn','sAMAccountName', 'member', 'objectSid']
+                # self.attrs = ['cn', 'gidNumber', 'memberUid', 'uid']
+                # VAI Specific, we need the SamAccountNAme and the gidNumber
+                self.attrs = ['cn','sAMAccountName', 'member', 'objectSid','gidNumber']
             if 'groupregex' in conf:
                 self.groupregex = re.compile(self.conf['groupregex'])
-            #ZR# self.essential_fields = ['cn']
+            # self.essential_fields = ['cn']
+            # VAI-Specific, the fields we need
             self.essential_fields = ['cn', 'sAMAccountName', 'objectSid']
             if conf.get('use_rid'):
                 self.attrs.append('sambaSID')
@@ -892,7 +897,8 @@ class GroupUpdateGetter(UpdateGetter):
         elif 'uid' in obj:
             gr.name = obj['uid'][0]
         else:
-            #ZR# gr.name = obj['sAMAccountName'][0].lower()
+            # gr.name = obj['sAMAccountName'][0].lower()
+            # VAI Specific, use the cn as the group name and force to lowercase
             gr.name = obj['cn'][0].lower()
         # group passwords are deferred to gshadow
         gr.passwd = '*'
@@ -907,6 +913,9 @@ class GroupUpdateGetter(UpdateGetter):
                 members.extend(obj['memberUid'])
         elif 'member' in obj:
             for member_dn in obj['member']:
+                # VAI-specific. We store our member attirbutes as a text of the full ldap path which is ugly. So we unmangle it to get a nice clean user-id
+                # Example: CN=Leddows\, Jan,OU=Chen - Users,OU=Chen - Laboratory of Epigenetics Analysis in Human Disease,OU=Research,OU=VARI,DC=vai,DC=org
+                # Needs to become: jan.leddows.  Luckily the scheme is consistant so we can do some string manipulation to make it work.
                 member_uid = member_dn.split(',')[0].split('=')[1]
                 member_uid_fixed_array = member_dn.replace(" ","").replace("\\","").lower().split('=')[1].split(',')
                 member_uid = member_uid_fixed_array[1] + "." + member_uid_fixed_array[0]
@@ -930,8 +939,11 @@ class GroupUpdateGetter(UpdateGetter):
         elif self.conf.get('use_rid'):
             gr.gid = int(sidToStr(obj['sambaSID'][0]).split('-')[-1])
         else:
-            #ZR# gr.gid = int(obj['gidNumber'][0])
-            gr.gid = int(sidToStr(obj['objectSid'][0]).split('-')[-1])
+            #VAI-Specific: If gidNumber is available then use, otherwise derive it from the sid. 
+            if 'gidNumber' in obj:
+                gr.gid = int(obj['gidNumber'][0])
+            else:
+                gr.gid = int(sidToStr(obj['objectSid'][0]).split('-')[-1])
 
         if 'offset' in self.conf:
             gr.gid = int(gr.gid + self.conf['offset'])
